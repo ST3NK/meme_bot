@@ -1,0 +1,9 @@
+# One meme image URL per line.
+# Blank lines and lines starting with # are ignored.
+#
+# Best results: use DIRECT image links — right-click the image and "Copy image
+# address", something ending in .jpg .png .gif .webp — those render inline.
+# Other links (an imgur gallery page, etc.) still post, just as a preview card.
+#
+# Add new ones anytime by editing this file in the GitHub app on your phone —
+# the next scheduled run picks them up, no redeploy needed.
