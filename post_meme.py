@@ -10,7 +10,7 @@ WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
 # Status messages go here if set; otherwise they fall back to the main webhook.
 STATUS_WEBHOOK_URL = os.environ.get("STATUS_WEBHOOK_URL", WEBHOOK_URL)
 # Reddit blocks default/blank user agents — this string just needs to be unique-ish.
-HEADERS = {"User-Agent": "discord-meme-poster/1.0 (by u/yourusername)"}
+HEADERS = {"User-Agent": "discord-meme-poster/1.0 (by u/Electrical-Baker2368)"}
 
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".gif")
 
