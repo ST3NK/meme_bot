@@ -3,16 +3,11 @@ import random
 import requests
 from datetime import datetime, timezone
 
-# Hand-pick your comedy subs here.
-SUBREDDITS = ["dankmemes", "comedyheaven", "okbuddyretard"]
-
 WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
-# Status messages go here if set; otherwise they fall back to the main webhook.
 STATUS_WEBHOOK_URL = os.environ.get("STATUS_WEBHOOK_URL", WEBHOOK_URL)
-# Reddit blocks default/blank user agents — this string just needs to be unique-ish.
-HEADERS = {"User-Agent": "discord-meme-poster/1.0 (by u/Electrical-Baker2368)"}
 
-IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".gif")
+MEMES_FILE = "memes.txt"
+IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".gif", ".webp")
 
 
 def send_status(text):
@@ -24,61 +19,50 @@ def send_status(text):
         print(f"status post failed: {e}")
 
 
-def fetch_image_posts(subreddit):
-    """Return a list of (title, image_url, permalink) for image posts in a sub."""
-    url = f"https://www.reddit.com/r/{subreddit}/top.json?t=day&limit=50"
-    resp = requests.get(url, headers=HEADERS, timeout=15)
-    resp.raise_for_status()
-    posts = resp.json()["data"]["children"]
-
-    candidates = []
-    for p in posts:
-        d = p["data"]
-        if d.get("stickied"):
+def load_pool(path):
+    """Read memes.txt: one URL per line, blank lines and #-comments ignored."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        return []
+    pool = []
+    for line in lines:
+        url = line.strip()
+        if not url or url.startswith("#"):
             continue
-        link = d.get("url_overridden_by_dest") or d.get("url", "")
-        if link.lower().endswith(IMAGE_EXTS):
-            candidates.append((d["title"], link, d["permalink"]))
-    return candidates
+        pool.append(url)
+    return pool
 
 
 def main():
-    # Pool candidates from every subreddit, tagging each with its source.
-    pool = []
-    for sub in SUBREDDITS:
-        try:
-            for title, image_url, permalink in fetch_image_posts(sub):
-                pool.append((title, image_url, permalink, sub))
-        except Exception as e:
-            print(f"skip r/{sub}: {e}")
-
+    pool = load_pool(MEMES_FILE)
     if not pool:
-        print("no image posts found in any subreddit this run")
-        send_status("⚠️ ran, but found no image posts in any subreddit")
+        print(f"{MEMES_FILE} is empty or missing")
+        send_status(f"⚠️ ran, but {MEMES_FILE} has no memes to post")
         return
 
-    title, image_url, permalink, sub = random.choice(pool)
+    url = random.choice(pool)
 
-    content = (
-        f"{title}\n\n"
-        f"— from r/{sub} · https://reddit.com{permalink}"
-    )
-    payload = {
-        "content": content[:1900],
-        "embeds": [{"image": {"url": image_url}}],
-    }
+    # Direct image links render cleanly inside an embed. Anything else (an imgur
+    # page link, etc.) goes out as plain text so Discord can try to unfurl it.
+    clean = url.lower().split("?")[0]  # ignore ?width=… query strings
+    if clean.endswith(IMAGE_EXTS):
+        payload = {"embeds": [{"image": {"url": url}}]}
+    else:
+        payload = {"content": url}
+
     r = requests.post(WEBHOOK_URL, json=payload, timeout=15)
     r.raise_for_status()
 
-    print(f"posted from r/{sub}: {title}")
-    send_status(f"✅ ran, posted a meme from r/{sub}")
+    print(f"posted: {url}")
+    send_status(f"✅ ran, posted a meme ({len(pool)} in pool)")
 
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        # Something broke mid-run — report it so a silent failure doesn't slip by.
         print(f"run failed: {e}")
         send_status(f"❌ run failed: {e}")
-        raise  # re-raise so the Actions run also shows red
+        raise
