@@ -1,0 +1,20 @@
+name: Daily memes
+
+on:
+  schedule:
+    - cron: "0 8 * * *"    # 08:00 UTC  (~10:00 your time in summer)
+    - cron: "0 17 * * *"   # 17:00 UTC  (~19:00 your time in summer)
+  workflow_dispatch:        # lets you trigger a test run by hand
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - run: python post_meme.py
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
