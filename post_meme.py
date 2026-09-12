@@ -1,15 +1,27 @@
 import os
 import random
 import requests
+from datetime import datetime, timezone
 
 # Hand-pick your comedy subs here.
 SUBREDDITS = ["dankmemes", "comedyheaven", "okbuddyretard"]
 
 WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
+# Status messages go here if set; otherwise they fall back to the main webhook.
+STATUS_WEBHOOK_URL = os.environ.get("STATUS_WEBHOOK_URL", WEBHOOK_URL)
 # Reddit blocks default/blank user agents — this string just needs to be unique-ish.
 HEADERS = {"User-Agent": "discord-meme-poster/1.0 (by u/yourusername)"}
 
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".gif")
+
+
+def send_status(text):
+    """Post a heartbeat line so you know the run happened."""
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    try:
+        requests.post(STATUS_WEBHOOK_URL, json={"content": f"[{stamp}] {text}"}, timeout=15)
+    except Exception as e:
+        print(f"status post failed: {e}")
 
 
 def fetch_image_posts(subreddit):
@@ -42,24 +54,31 @@ def main():
 
     if not pool:
         print("no image posts found in any subreddit this run")
+        send_status("⚠️ ran, but found no image posts in any subreddit")
         return
 
     title, image_url, permalink, sub = random.choice(pool)
 
-    # Source line sits at the bottom of the printed message.
     content = (
         f"{title}\n\n"
         f"— from r/{sub} · https://reddit.com{permalink}"
     )
-
     payload = {
         "content": content[:1900],
         "embeds": [{"image": {"url": image_url}}],
     }
     r = requests.post(WEBHOOK_URL, json=payload, timeout=15)
     r.raise_for_status()
+
     print(f"posted from r/{sub}: {title}")
+    send_status(f"✅ ran, posted a meme from r/{sub}")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        # Something broke mid-run — report it so a silent failure doesn't slip by.
+        print(f"run failed: {e}")
+        send_status(f"❌ run failed: {e}")
+        raise  # re-raise so the Actions run also shows red
