@@ -2,8 +2,7 @@ import os
 import random
 import requests
 
-# Swap these for the comedy subs you actually want. Hand-pick them —
-# don't grab a generic "nsfw" preset or you'll get the sexual stuff you said you don't want.
+# Hand-pick your comedy subs here.
 SUBREDDITS = ["dankmemes", "comedyheaven", "okbuddyretard"]
 
 WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
@@ -13,7 +12,8 @@ HEADERS = {"User-Agent": "discord-meme-poster/1.0 (by u/yourusername)"}
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".gif")
 
 
-def fetch_image_post(subreddit):
+def fetch_image_posts(subreddit):
+    """Return a list of (title, image_url, permalink) for image posts in a sub."""
     url = f"https://www.reddit.com/r/{subreddit}/top.json?t=day&limit=50"
     resp = requests.get(url, headers=HEADERS, timeout=15)
     resp.raise_for_status()
@@ -31,31 +31,34 @@ def fetch_image_post(subreddit):
 
 
 def main():
-    subs = SUBREDDITS[:]
-    random.shuffle(subs)
-
-    for sub in subs:
+    # Pool candidates from every subreddit, tagging each with its source.
+    pool = []
+    for sub in SUBREDDITS:
         try:
-            candidates = fetch_image_post(sub)
+            for title, image_url, permalink in fetch_image_posts(sub):
+                pool.append((title, image_url, permalink, sub))
         except Exception as e:
             print(f"skip r/{sub}: {e}")
-            continue
-        if candidates:
-            title, image_url, permalink = random.choice(candidates)
-            payload = {
-                "embeds": [{
-                    "title": title[:250],
-                    "url": f"https://reddit.com{permalink}",
-                    "image": {"url": image_url},
-                    "footer": {"text": f"r/{sub}"},
-                }]
-            }
-            r = requests.post(WEBHOOK_URL, json=payload, timeout=15)
-            r.raise_for_status()
-            print(f"posted from r/{sub}: {title}")
-            return
 
-    print("no image posts found in any subreddit this run")
+    if not pool:
+        print("no image posts found in any subreddit this run")
+        return
+
+    title, image_url, permalink, sub = random.choice(pool)
+
+    # Source line sits at the bottom of the printed message.
+    content = (
+        f"{title}\n\n"
+        f"— from r/{sub} · https://reddit.com{permalink}"
+    )
+
+    payload = {
+        "content": content[:1900],
+        "embeds": [{"image": {"url": image_url}}],
+    }
+    r = requests.post(WEBHOOK_URL, json=payload, timeout=15)
+    r.raise_for_status()
+    print(f"posted from r/{sub}: {title}")
 
 
 if __name__ == "__main__":
