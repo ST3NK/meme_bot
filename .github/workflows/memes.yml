@@ -2,7 +2,7 @@ name: meme poster
 
 on:
   schedule:
-    - cron: "0 * * * *"
+    - cron: "0/5 * * * *"
   workflow_dispatch:        # lets you run it manually from the Actions tab
 
 jobs:
