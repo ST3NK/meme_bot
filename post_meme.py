@@ -1,28 +1,22 @@
 import os
-import re
-import html
 import random
 import requests
 import feedparser
 from datetime import datetime, timezone
 
-# Hand-pick your comedy subs here.
-SUBREDDITS = ["dankmemes", "comedyheaven", "okbuddyretard"]
+# Each sub maps to its own rss.app bridge feed URL.
+# Bridge fetches Reddit from rss.app's IP, so GitHub Actions never touches Reddit directly.
+SUBREDDIT_FEEDS = {
+    "dankmemes": "https://rss.app/feeds/keHUQ03lfmJ4jFeH.xml",
+    "comedyheaven": "https://rss.app/feeds/REPLACE_ME.xml",   # <-- paste your comedyheaven feed
+    "okbuddyretard": "https://rss.app/feeds/REPLACE_ME.xml",  # <-- paste your okbuddyretard feed
+}
 
 WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
 # Status messages go here if set; otherwise they fall back to the main webhook.
 STATUS_WEBHOOK_URL = os.environ.get("STATUS_WEBHOOK_URL", WEBHOOK_URL)
-# Reddit's RSS wants a browser-like UA + accept-language. Since your reachability
-# test returned 200, this header set is what makes it pass.
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
-    ),
-    "accept-language": "en-US,en;q=0.9",
-}
-
-IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".gif")
+# We're hitting rss.app, not Reddit, so no special headers are needed — this is just polite.
+HEADERS = {"User-Agent": "discord-meme-poster/1.0"}
 
 
 def send_status(text):
@@ -34,10 +28,9 @@ def send_status(text):
         print(f"status post failed: {e}")
 
 
-def fetch_image_posts(subreddit):
-    """Return a list of (title, image_url, post_url) for image posts in a sub, via RSS."""
-    url = f"https://www.reddit.com/r/{subreddit}/top/.rss?t=day&limit=50"
-    resp = requests.get(url, headers=HEADERS, timeout=15)
+def fetch_image_posts(subreddit, feed_url):
+    """Return a list of (title, image_url, post_url) for image posts, via the sub's rss.app feed."""
+    resp = requests.get(feed_url, headers=HEADERS, timeout=15)
     resp.raise_for_status()
 
     feed = feedparser.parse(resp.content)
@@ -47,20 +40,12 @@ def fetch_image_posts(subreddit):
         title = entry.get("title", "")
         post_url = entry.get("link", "")  # full URL to the reddit comments page
 
-        # The Atom <content> is an HTML blob. For a single-image post, the actual
-        # image lives in the first <a href="...">[link]</a> inside it.
-        content_html = ""
-        if entry.get("content"):
-            content_html = entry.content[0].value
-        elif entry.get("summary"):
-            content_html = entry.summary
-        content_html = html.unescape(content_html)
-
+        # rss.app puts the image in <media:content>; feedparser exposes it as
+        # entry.media_content — a list of dicts, each with 'medium' and 'url'.
         image_url = None
-        for m in re.finditer(r'href="([^"]+)"', content_html):
-            href = m.group(1)
-            if href.lower().split("?")[0].endswith(IMAGE_EXTS):
-                image_url = href
+        for media in entry.get("media_content", []):
+            if media.get("medium") == "image" and media.get("url"):
+                image_url = media["url"]
                 break
 
         if image_url:
@@ -69,18 +54,18 @@ def fetch_image_posts(subreddit):
 
 
 def main():
-    # Pool candidates from every subreddit, tagging each with its source.
+    # Pool candidates from every feed, tagging each with its source sub.
     pool = []
-    for sub in SUBREDDITS:
+    for sub, feed_url in SUBREDDIT_FEEDS.items():
         try:
-            for title, image_url, post_url in fetch_image_posts(sub):
+            for title, image_url, post_url in fetch_image_posts(sub, feed_url):
                 pool.append((title, image_url, post_url, sub))
         except Exception as e:
             print(f"skip r/{sub}: {e}")
 
     if not pool:
-        print("no image posts found in any subreddit this run")
-        send_status("⚠️ ran, but found no image posts in any subreddit")
+        print("no image posts found in any feed this run")
+        send_status("⚠️ ran, but found no image posts in any feed")
         return
 
     title, image_url, post_url, sub = random.choice(pool)
