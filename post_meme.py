@@ -73,6 +73,7 @@ def main():
     content = (
         f"{title}\n\n"
         f"— from r/{sub} · {post_url}"
+        f"BTW, Alex är fortfarande bronz"
     )
     payload = {
         "content": content[:1900],
