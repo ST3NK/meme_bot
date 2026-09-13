@@ -8,8 +8,8 @@ from datetime import datetime, timezone
 # Bridge fetches Reddit from rss.app's IP, so GitHub Actions never touches Reddit directly.
 SUBREDDIT_FEEDS = {
     "dankmemes": "https://rss.app/feeds/keHUQ03lfmJ4jFeH.xml",
-    "comedyheaven": "https://rss.app/feeds/REPLACE_ME.xml",   # <-- paste your comedyheaven feed
-    "okbuddyretard": "https://rss.app/feeds/REPLACE_ME.xml",  # <-- paste your okbuddyretard feed
+    "comedyheaven": "https://rss.app/feeds/fsa21IAxOlww0exA.xml",   # <-- paste your comedyheaven feed
+    "okbuddyretard": "https://rss.app/feeds/keHUQ03lfmJ4jFeH.xml",  # <-- paste your okbuddyretard feed
 }
 
 WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
