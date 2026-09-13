@@ -31,4 +31,4 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           STATUS_WEBHOOK_URL: ${{ secrets.STATUS_WEBHOOK_URL }}
-        run: python your_script_name.py
+        run: post_meme.py
