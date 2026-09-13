@@ -74,6 +74,7 @@ def main():
         f"{title}\n\n"
         f"— from r/{sub} · {post_url}"
         f"\n BTW Alex är fortfarande bronz"
+        f"\n att han prioriterar sina barn istället för att ranka upp är en lögn"
     )
     payload = {
         "content": content[:1900],
