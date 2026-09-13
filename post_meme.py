@@ -1,6 +1,9 @@
 import os
+import re
+import html
 import random
 import requests
+import feedparser
 from datetime import datetime, timezone
 
 # Hand-pick your comedy subs here.
@@ -9,8 +12,15 @@ SUBREDDITS = ["dankmemes", "comedyheaven", "okbuddyretard"]
 WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
 # Status messages go here if set; otherwise they fall back to the main webhook.
 STATUS_WEBHOOK_URL = os.environ.get("STATUS_WEBHOOK_URL", WEBHOOK_URL)
-# Reddit blocks default/blank user agents — this string just needs to be unique-ish.
-HEADERS = {"User-Agent": "discord-meme-poster/1.0 (by u/Electrical-Baker2368)"}
+# Reddit's RSS wants a browser-like UA + accept-language. Since your reachability
+# test returned 200, this header set is what makes it pass.
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
+    ),
+    "accept-language": "en-US,en;q=0.9",
+}
 
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".gif")
 
@@ -25,20 +35,36 @@ def send_status(text):
 
 
 def fetch_image_posts(subreddit):
-    """Return a list of (title, image_url, permalink) for image posts in a sub."""
-    url = f"https://www.reddit.com/r/{subreddit}/top.json?t=day&limit=50"
+    """Return a list of (title, image_url, post_url) for image posts in a sub, via RSS."""
+    url = f"https://www.reddit.com/r/{subreddit}/top/.rss?t=day&limit=50"
     resp = requests.get(url, headers=HEADERS, timeout=15)
     resp.raise_for_status()
-    posts = resp.json()["data"]["children"]
+
+    feed = feedparser.parse(resp.content)
 
     candidates = []
-    for p in posts:
-        d = p["data"]
-        if d.get("stickied"):
-            continue
-        link = d.get("url_overridden_by_dest") or d.get("url", "")
-        if link.lower().endswith(IMAGE_EXTS):
-            candidates.append((d["title"], link, d["permalink"]))
+    for entry in feed.entries:
+        title = entry.get("title", "")
+        post_url = entry.get("link", "")  # full URL to the reddit comments page
+
+        # The Atom <content> is an HTML blob. For a single-image post, the actual
+        # image lives in the first <a href="...">[link]</a> inside it.
+        content_html = ""
+        if entry.get("content"):
+            content_html = entry.content[0].value
+        elif entry.get("summary"):
+            content_html = entry.summary
+        content_html = html.unescape(content_html)
+
+        image_url = None
+        for m in re.finditer(r'href="([^"]+)"', content_html):
+            href = m.group(1)
+            if href.lower().split("?")[0].endswith(IMAGE_EXTS):
+                image_url = href
+                break
+
+        if image_url:
+            candidates.append((title, image_url, post_url))
     return candidates
 
 
@@ -47,8 +73,8 @@ def main():
     pool = []
     for sub in SUBREDDITS:
         try:
-            for title, image_url, permalink in fetch_image_posts(sub):
-                pool.append((title, image_url, permalink, sub))
+            for title, image_url, post_url in fetch_image_posts(sub):
+                pool.append((title, image_url, post_url, sub))
         except Exception as e:
             print(f"skip r/{sub}: {e}")
 
@@ -57,11 +83,11 @@ def main():
         send_status("⚠️ ran, but found no image posts in any subreddit")
         return
 
-    title, image_url, permalink, sub = random.choice(pool)
+    title, image_url, post_url, sub = random.choice(pool)
 
     content = (
         f"{title}\n\n"
-        f"— from r/{sub} · https://reddit.com{permalink}"
+        f"— from r/{sub} · {post_url}"
     )
     payload = {
         "content": content[:1900],
